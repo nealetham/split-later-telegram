@@ -101,7 +101,7 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         person = ' '.join(context.args[:-1])
         value = context.args[-1]
-    except ValueError: # User enters more than 2 arguments
+    except: # User enters < and > 2 arguments
         await update.message.reply_text("Error: the format should be '/add name value'.")
         pass
   
@@ -221,3 +221,4 @@ if __name__ == '__main__':
     #                       webhook_url=f"https://{NAME}.herokuapp.com/{TOKEN}")
     
     application.run_polling()
+    
