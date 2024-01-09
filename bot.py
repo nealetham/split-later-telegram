@@ -14,13 +14,11 @@ class ChatData:
     """Custom class for chat_data."""
     def __init__(self) -> None:
         self.users = list()
-        self.logs = list()
         self.expenditure = dict()
         self.shared_expenditure = dict()
 
     def clear(self) -> None:
         self.users.clear()
-        self.logs.clear()
         self.expenditure.clear()
         self.shared_expenditure.clear()
 
@@ -38,12 +36,6 @@ class ChatData:
             debtor_value_dict = self.shared_expenditure.get(key, {})  # gets dict of debtors and values
             debtor_value_dict[frozenset(others)] = debtor_value_dict.get(frozenset(others), 0) + value # gets value and increment
             self.shared_expenditure[key] = debtor_value_dict
-
-    def update_log(self, update_time: datetime, log: str) -> None:
-        sg_timezone = pytz.timezone('Asia/Singapore')
-        sg_datetime = update_time.replace(tzinfo=pytz.utc).astimezone(sg_timezone)
-        update_time = sg_datetime.strftime('%a %d %b, %I:%M%p')
-        self.logs.append(f"{update_time} --- {log}")
     
     def avg_expenditure(self) -> float: # excludes misc_expenditure
         try:
@@ -53,14 +45,6 @@ class ChatData:
         except ZeroDivisionError:
             return 0
     
-    def remove(self, key: str) -> None:
-        if key in self.expenditure:
-            del self.expenditure[key]
-            
-        if key in self.shared_expenditure:
-            del self.shared_expenditure[key]
-
-        
     def resolve_expenses(self) -> list:
         avg_expenditure = self.avg_expenditure()
 
@@ -126,20 +110,20 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Displays all commands and their usages
     Usage: /help
     """
-    preamble = "Here are all the commands available to you!\n\n"
+    preamble = "Here are all the commands available! Commands without any examples can be used as is, the other more complicated ones will be shown!\n\n"
     # start_message = "/start: Restarts the session and clears all previous record\nUsage: /start\n\n"
     # help_message = "/help: Displays all commands\nUsage: /help\n\n"
-    include_message = "/include: Adds users to be included in the receipt. Always start with this!\nUsage: /include @john @adam\n\n"
-    add_message = "/add: Adds an expense. Can be used to explicitly split cost with several others\nUsage: /add John 10 or /add @john 10 @adam\n\n"
-    view_message = "/view: Displays the expenses of all individuals\nUsage: /view\n\n"
-    resolve_message = "/resolve: Calculates which individual needs to pay who\nUsage: /resolve\n\n"
-    clear_message = "/clear: Clears all previous records\nUsage: /clear\n\n"
-    logs_message = "/logs: Displays all transactions since the start\nUsage: /logs\n\n"
-    note_message = "*Note: When encountering an error, please re-enter the instruction and do not edit the previous one.\n\n"
-    credits = "Made by: @nelthm"
+    include_message = "/include: Add users to be included in the receipt (as many as you want!). Always start with this!\n\ne.g.\nJohn, Adam and Sally agreed to share costs\n/include @john @adam @sally\n"
+    add_message = "/add: Add expense. Names can be added at the end to specify that it is to be split amongst them.\n\ne.g.\nJohn paid $10, to be split amongst everyone\n/add John 10\n\nJohn paid $10, and the cost is to be split among John and Adam\n/add @john 10 @adam\n"
+    view_message = "/view: Displays all expenses\n"
+    resolve_message = "/resolve: Displays which individual needs to pay who\n"
+    clear_message = "/clear: Clears all records\n"
+    note_message = "\n*Note: When encountering an error, please re-enter the instruction and not edit the previous one.\n\n"
+    credits = "Made by @nelthm"
+    separator = "=====================================\n"
 
     await update.message.reply_text(
-        f"{preamble}{include_message}{add_message}{view_message}{resolve_message}{clear_message}{logs_message}{note_message}{credits}"
+        f"{preamble}{separator}{include_message}{separator}{add_message}{separator}{view_message}{separator}{resolve_message}{separator}{clear_message}{separator}{note_message}{credits}"
     )
 
 async def include(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -236,25 +220,11 @@ async def resolve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Either no individuals added, no expenses added, or everyone has spent equal amounts.")
 
 
-async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Displays all transactions since epoch
-    Usage: /logs
-    """
-    message = ''
-    for log in context.chat_data.logs:
-        message += f"{log}\n"
-
-    if message == '':
-        await update.message.reply_text(f"No records have been added.")
-    else:
-        await update.message.reply_text(message)
-
 async def _unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Internal use for unknown command handling
     """
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Error: Either a wrong command has been entered, or a previous message has been edited. Please retype as opposed to editing the previous message :)")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Error: Either a wrong command has been entered, or a previous message has been edited.\nPlease retype rather than editing the previous message :)")
 
 
 # ================= HELPER FUNCTIONS =================
@@ -294,25 +264,15 @@ if __name__ == '__main__':
     view_handler = CommandHandler('view', view, filters=~filters.UpdateType.EDITED_MESSAGE)
     resolve_handler = CommandHandler('resolve', resolve, filters=~filters.UpdateType.EDITED_MESSAGE)
     clear_handler = CommandHandler('clear', clear, filters=~filters.UpdateType.EDITED_MESSAGE)
-    logs_handler = CommandHandler('logs', logs, filters=~filters.UpdateType.EDITED_MESSAGE)
+    core_handlers = [start_handler, include_handler, help_handler, add_handler, view_handler, resolve_handler, clear_handler]
 
     # Add core-function handlers
-    application.add_handler(start_handler)
-    application.add_handler(include_handler)
-    application.add_handler(help_handler)
-    application.add_handler(add_handler)
-    application.add_handler(view_handler)
-    application.add_handler(resolve_handler)
-    application.add_handler(clear_handler)
-    application.add_handler(logs_handler)
+    application.add_handlers(core_handlers)
                             
     # Setup and add handlers
     unknown_handler = MessageHandler(filters.COMMAND, _unknown)
     application.add_handler(unknown_handler)
 
-    # inline_query_handler = InlineQueryHandler(inline_query)
-    # application.add_handler(inline_query_handler)
-    
     # Start the webhook
     # application.run_webhook(listen="0.0.0.0",
     #                       port=int(PORT),
