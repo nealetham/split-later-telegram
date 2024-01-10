@@ -1,4 +1,4 @@
-import os, logging, datetime, pytz, re
+import os, logging, re
 from dotenv import load_dotenv
 
 from telegram import Update
@@ -10,8 +10,8 @@ from telegram.ext import (
   filters,
 )
 
+# Define custom class for chat_data
 class ChatData:
-    """Custom class for chat_data."""
     def __init__(self) -> None:
         self.users = list()
         self.expenditure = dict()
@@ -31,14 +31,14 @@ class ChatData:
         if others is None:
             p_value = self.expenditure.get(key, 0)
             self.expenditure[key] = p_value + value
-        else:
-            # self.shared_expenditure = {creditor: {debtors: value, debtors1: value}}
+        else: # self.shared_expenditure = {creditor: {debtors: value, debtors1: value}}
             debtor_value_dict = self.shared_expenditure.get(key, {})  # gets dict of debtors and values
             debtor_value_dict[frozenset(others)] = debtor_value_dict.get(frozenset(others), 0) + value # gets value and increment
             self.shared_expenditure[key] = debtor_value_dict
     
-    def avg_expenditure(self) -> float: # excludes misc_expenditure
+    def avg_expenditure(self) -> float: 
         try:
+            # Excludes special expenditure
             total_expenditure = sum(self.expenditure.values())
             num_people = len(self.expenditure)
             return total_expenditure/num_people
@@ -50,6 +50,7 @@ class ChatData:
 
         debts = {person: expense - avg_expenditure for person, expense in self.expenditure.items()}
 
+        # Account for special expenditures
         for creditor, debtor_value_dict in self.shared_expenditure.items():
             for debtors, value in debtor_value_dict.items():
                 shared_expense = value / (len(debtors) + 1)
@@ -83,8 +84,7 @@ class ChatData:
               transactions.append((debtor, creditor, transfer_amount))
 
         return transactions
-        
-
+    
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Displays salutation and clears all previous records
@@ -133,10 +133,9 @@ async def include(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     users = ' '.join(context.args)
     num_users = len(context.args)
-    regex = handle_regex(num_users)
 
-    if re.fullmatch(regex, users):
-        context.chat_data.include(users)
+    if include_regex(num_users, users):
+        context.chat_data.include(context.args)
         await update.message.reply_text(f"Alright! We detected {num_users}. You may now add transactions via the add command!")
     else:
         await update.message.reply_text("Error: the format should be /include @name @name @name...")
@@ -154,23 +153,39 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     others = None
     if len(context.args) > 2:
         try:
+            person_value = ' '.join(context.args[0:2])
             person = context.args[0]
-            value = context.args[1]
+            value = context.args[1]            
             others = context.args[2:]
+            if not add_regex(person_value) or not include_regex(len(others), ' '.join(others)):
+                raise Exception
+            if person not in context.chat_data.users:
+                raise Exception
+            
+            for user in others:
+                if user not in context.chat_data.users:
+                    raise Exception
+                
         except:
-            await update.message.reply_text("Error: the format should be '/add @name value @other1 @other2...'.")
-            pass
+            await update.message.reply_text("Error: the format should be '/add @name value @other1 @other2...'. Only specify users you've added using /include!")
+            return
     else:
         try:
-            person = ' '.join(context.args[:-1])
+            person_value = ' '.join(context.args[0:2])
+            person = context.args[0]
             value = context.args[-1]
+            if not add_regex(person_value):
+                raise Exception
+            
+            if person not in context.chat_data.users:
+                raise Exception
+
         except: # User enters < and > 2 arguments
-            await update.message.reply_text("Error: the format should be '/add @name value @other_name'.")
-            pass
+            await update.message.reply_text("Error: the format should be '/add @name value @other_name'. Only specify users you've added using /include!")
+            return
 
     try:
         context.chat_data.update_expenditure(person, float(value), others)
-        context.chat_data.update_log(update.message.date, update.message.text)
         await update.message.reply_text("Added!")
     except ValueError: # non-numeric value found as expense argument
         await update.message.reply_text("Error: non-numeric value for expense found.")
@@ -228,14 +243,19 @@ async def _unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ================= HELPER FUNCTIONS =================
-def handle_regex(num_handles):
+    
+def include_regex(num_handles: int, users: str) -> bool:
     # The regex pattern for a Telegram handle
     handle_pattern = r'@[\w\d_]+'
-
-    # Construct the full regex pattern for the specified number of handles
     full_pattern = fr'{handle_pattern}(\s{handle_pattern}){{{num_handles - 1}}}'
 
-    return full_pattern
+    return re.fullmatch(full_pattern, users)
+
+def add_regex(args: str) -> bool:
+    # Regex pattern for @user numeral
+    handle_pattern = r'@(\S+)\s+(\d+)$'
+    return re.fullmatch(handle_pattern, args)
+
 # ====================================================
 
 
@@ -243,18 +263,14 @@ if __name__ == '__main__':
     # Initialize environment variables
     load_dotenv()
     TOKEN = os.environ['BOT_TOKEN']
-    NAME = 'SplitLaterBot'
-
-    # Port given by Heroku
-    # PORT = os.environ['PORT']
-
-    # Enable Logging
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-    logger = logging.getLogger(__name__)
 
     # Build application
     context_types = ContextTypes(chat_data=ChatData)
     application = ApplicationBuilder().token(TOKEN).context_types(context_types).build()
+
+    # Enable Logging
+    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
     # Setup core-function handlers
     start_handler = CommandHandler('start', start, filters=~filters.UpdateType.EDITED_MESSAGE)
@@ -273,11 +289,5 @@ if __name__ == '__main__':
     unknown_handler = MessageHandler(filters.COMMAND, _unknown)
     application.add_handler(unknown_handler)
 
-    # Start the webhook
-    # application.run_webhook(listen="0.0.0.0",
-    #                       port=int(PORT),
-    #                       url_path=TOKEN,
-    #                       webhook_url=f"https://{NAME}.herokuapp.com/{TOKEN}")
-    
     application.run_polling()
     
