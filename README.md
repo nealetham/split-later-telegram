@@ -1,12 +1,14 @@
 # Introduction
 
-This creation of this Telegram Bot was motivated after attending several outings which resulted in payment confusion amongst the group.
+This creation of this Telegram bot was motivated after attending several outings which resulted in payment confusion amongst the group.
 
 The bot features a number of commands to aid in settling debts. All expenses added into the receipt is assumed to be split evenly amongst members included. But special expenses meant to be split amongst a subgroup can be specified as well!
 
+The bot can be used in a private conversation, or added into a group!
+
 ### Note
 
-The Telegram is not currently being hosted, you may refer to the instructions below to test, or host it on your own!
+The Telegram bot is not currently being hosted, you may refer to the instructions below to test, or host it on your own!
 
 # Installing (Dev)
 
