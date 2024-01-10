@@ -1,4 +1,4 @@
-import os, logging, re
+import os, re, asyncio, json
 from dotenv import load_dotenv
 
 from telegram import Update
@@ -84,7 +84,15 @@ class ChatData:
               transactions.append((debtor, creditor, transfer_amount))
 
         return transactions
-    
+
+# Initialize environment variables
+load_dotenv()
+TOKEN = os.environ['BOT_TOKEN']
+
+# Build application
+context_types = ContextTypes(chat_data=ChatData)
+application = ApplicationBuilder().token(TOKEN).context_types(context_types).build()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Displays salutation and clears all previous records
@@ -259,19 +267,10 @@ def add_regex(args: str) -> bool:
 # ====================================================
 
 
-if __name__ == '__main__':
-    # Initialize environment variables
-    load_dotenv()
-    TOKEN = os.environ['BOT_TOKEN']
+def lambda_handler(event, context):
+    return asyncio.get_event_loop().run_until_complete(main(event, context))
 
-    # Build application
-    context_types = ContextTypes(chat_data=ChatData)
-    application = ApplicationBuilder().token(TOKEN).context_types(context_types).build()
-
-    # Enable Logging
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
+async def main(event, context):
     # Setup core-function handlers
     start_handler = CommandHandler('start', start, filters=~filters.UpdateType.EDITED_MESSAGE)
     include_handler = CommandHandler('include', include, filters=~filters.UpdateType.EDITED_MESSAGE)
@@ -289,5 +288,20 @@ if __name__ == '__main__':
     unknown_handler = MessageHandler(filters.COMMAND, _unknown)
     application.add_handler(unknown_handler)
 
-    application.run_polling()
+    try:    
+        await application.initialize()
+        await application.process_update(
+            Update.de_json(json.loads(event["body"]), application.bot)
+        )
+    
+        return {
+            'statusCode': 200,
+            'body': 'Success'
+        }
+
+    except Exception as exc:
+        return {
+            'statusCode': 500,
+            'body': 'Failure'
+        }
     
