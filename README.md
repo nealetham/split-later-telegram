@@ -36,4 +36,4 @@ You may now interact with the bot on Telegram!
 
 In the other branch of the repository, the `bot.py` has been edited with the sole purpose of hosting on AWS Lambda.
 
-References - [Hosting on AWS Lambda](https://github.com/havebeenfitz/om-random-coffee-bot/wiki/Hosting-the-bot-on-AWS-Lambda)
+References - [Hosting on AWS Lambda](https://github.com/havebeenfitz/om-random-coffee-bot/wiki/Hosting-the-bot-on-AWS-Lambda), [Lambda Integration](https://dev.to/aws-builders/create-a-telegram-bot-with-aws-lambda-integration-part-1-4616)
